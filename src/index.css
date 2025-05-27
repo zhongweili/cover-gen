@@ -1,0 +1,41 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    font-family: 'Inter', 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'WenQuanYi Micro Hei', sans-serif;
+  }
+  
+  body {
+    @apply bg-gray-50 text-gray-800;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-gradient-primary text-white rounded-lg px-6 py-3 font-semibold shadow-primary transition-all duration-200 hover:scale-102 hover:shadow-lg;
+  }
+  
+  .btn-secondary {
+    @apply bg-white text-primary border-2 border-primary rounded-lg px-6 py-3 font-semibold transition-all duration-200 hover:bg-primary hover:text-white;
+  }
+  
+  .input-field {
+    @apply border-2 border-gray-200 rounded-lg px-4 py-3 text-body transition-colors duration-200 focus:border-primary focus:ring-4 focus:ring-primary/10 focus:outline-none;
+  }
+  
+  .card {
+    @apply bg-white rounded-xl p-6 shadow-card border border-gray-100;
+  }
+  
+  .hover-lift {
+    @apply transition-transform duration-200 hover:-translate-y-0.5 hover:shadow-lg;
+  }
+}
+
+@layer utilities {
+  .hover\:scale-102:hover {
+    transform: scale(1.02);
+  }
+} 
