@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Download, Copy, RotateCcw, Sparkles, Clock } from 'lucide-react';
+import { Download, Copy, RotateCcw, Sparkles, Clock, AlertTriangle, RefreshCw } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 
@@ -23,6 +23,39 @@ export const PreviewArea: React.FC<PreviewAreaProps> = ({
   onDownload,
   onCopy
 }) => {
+  // 解析错误类型
+  const getErrorType = (errorMessage: string | null) => {
+    if (!errorMessage) return 'unknown';
+    if (errorMessage.includes('超时')) return 'timeout';
+    if (errorMessage.includes('访问被拒绝') || errorMessage.includes('403')) return 'forbidden';
+    if (errorMessage.includes('验证失败') || errorMessage.includes('401')) return 'unauthorized';
+    if (errorMessage.includes('频率过高') || errorMessage.includes('429')) return 'rate_limit';
+    if (errorMessage.includes('参数错误') || errorMessage.includes('400')) return 'bad_request';
+    if (errorMessage.includes('服务器错误') || errorMessage.includes('500')) return 'server_error';
+    if (errorMessage.includes('网络') || errorMessage.includes('CORS')) return 'network';
+    return 'api_error';
+  };
+
+  // 获取错误图标和颜色
+  const getErrorDisplay = (errorType: string) => {
+    switch (errorType) {
+      case 'timeout':
+        return { icon: '⏱️', color: 'bg-yellow-100 text-yellow-600', title: '请求超时' };
+      case 'forbidden':
+        return { icon: '🔒', color: 'bg-red-100 text-red-600', title: '访问被拒绝' };
+      case 'unauthorized':
+        return { icon: '🔑', color: 'bg-orange-100 text-orange-600', title: 'API Key 无效' };
+      case 'rate_limit':
+        return { icon: '⚡', color: 'bg-purple-100 text-purple-600', title: '请求过于频繁' };
+      case 'network':
+        return { icon: '🌐', color: 'bg-blue-100 text-blue-600', title: '网络连接问题' };
+      case 'server_error':
+        return { icon: '🔧', color: 'bg-gray-100 text-gray-600', title: '服务器错误' };
+      default:
+        return { icon: '❌', color: 'bg-red-100 text-red-600', title: '生成失败' };
+    }
+  };
+
   // Empty State
   if (!isGenerating && results.length === 0 && !error) {
     return (
@@ -64,7 +97,9 @@ export const PreviewArea: React.FC<PreviewAreaProps> = ({
           <Clock className="w-10 h-10 text-white" />
         </div>
         <h3 className="text-h3 text-gray-900 mb-4">AI正在为你创作封面...</h3>
-        <p className="text-gray-600 mb-6">预计需要 15-30 秒</p>
+        <p className="text-gray-600 mb-6">
+          OpenAI 模型预计需要 1-2 分钟，SeedDream 模型约 10-20 秒
+        </p>
         
         {/* Progress Bar */}
         <div className="w-80 bg-gray-200 rounded-full h-3 mb-3">
@@ -79,6 +114,7 @@ export const PreviewArea: React.FC<PreviewAreaProps> = ({
         
         <div className="mt-8 text-xs text-gray-400 max-w-sm">
           <p>正在调用 AI 模型生成您的专属封面，请耐心等待...</p>
+          <p className="mt-2">如果超时，系统会自动提示，您可以重新尝试</p>
         </div>
       </Card>
     );
@@ -86,22 +122,92 @@ export const PreviewArea: React.FC<PreviewAreaProps> = ({
 
   // Error State
   if (error) {
+    const errorType = getErrorType(error);
+    const errorDisplay = getErrorDisplay(errorType);
+    
     return (
       <Card className="min-h-[500px] lg:min-h-[600px] flex flex-col items-center justify-center text-center">
-        <div className="w-20 h-20 bg-error/10 rounded-full flex items-center justify-center mb-6">
-          <span className="text-2xl">😔</span>
+        <div className={`w-20 h-20 rounded-full flex items-center justify-center mb-6 ${errorDisplay.color}`}>
+          <span className="text-3xl">{errorDisplay.icon}</span>
         </div>
-        <h3 className="text-h3 text-gray-900 mb-4">生成失败</h3>
-        <div className="max-w-md mb-6">
-          <p className="text-error text-sm leading-relaxed">{error}</p>
-        </div>
-        <Button onClick={onRegenerate} variant="secondary">
-          <RotateCcw className="w-4 h-4 mr-2" />
-          重新生成
-        </Button>
         
-        <div className="mt-8 text-xs text-gray-400 max-w-sm">
-          <p>如果问题持续出现，请检查 API 配置或联系技术支持</p>
+        <h3 className="text-h3 text-gray-900 mb-4">{errorDisplay.title}</h3>
+        
+        <div className="max-w-lg mb-6">
+          <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-left">
+            <div className="flex items-start space-x-3">
+              <AlertTriangle className="w-5 h-5 text-orange-500 mt-0.5 flex-shrink-0" />
+              <div className="flex-1">
+                <div className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">
+                  {error}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex flex-col sm:flex-row gap-3 mb-6">
+          <Button onClick={onRegenerate} variant="primary">
+            <RefreshCw className="w-4 h-4 mr-2" />
+            重新生成
+          </Button>
+          
+          {errorType === 'timeout' && (
+            <Button 
+              onClick={() => window.open('https://www.dmxapi.cn', '_blank')} 
+              variant="outline"
+            >
+              检查 API 状态
+            </Button>
+          )}
+          
+          {(errorType === 'forbidden' || errorType === 'unauthorized') && (
+            <Button 
+              onClick={() => window.open('https://www.dmxapi.cn', '_blank')} 
+              variant="outline"
+            >
+              管理 API Key
+            </Button>
+          )}
+        </div>
+        
+        <div className="text-xs text-gray-400 max-w-md space-y-2">
+          {errorType === 'timeout' && (
+            <div className="bg-blue-50 border border-blue-200 rounded p-3 text-blue-700">
+              <p className="font-medium">💡 超时解决建议：</p>
+              <p>• OpenAI 模型处理时间较长，已延长至 2 分钟超时</p>
+              <p>• 可尝试使用 SeedDream 3.0 模型，速度更快</p>
+              <p>• 简化提示词可能有助于加快生成速度</p>
+            </div>
+          )}
+          
+          {errorType === 'forbidden' && (
+            <div className="bg-yellow-50 border border-yellow-200 rounded p-3 text-yellow-700">
+              <p className="font-medium">🔑 权限问题解决：</p>
+              <p>• 检查 DMX API 账户是否有足够余额</p>
+              <p>• 确认是否有对应模型的使用权限</p>
+              <p>• OpenAI 模型可能需要特殊权限，建议先试用 SeedDream</p>
+            </div>
+          )}
+          
+          {errorType === 'network' && (
+            <div className="bg-green-50 border border-green-200 rounded p-3 text-green-700">
+              <p className="font-medium">🌐 网络问题解决：</p>
+              <p>• 检查网络连接是否正常</p>
+              <p>• 尝试刷新页面重新配置</p>
+              <p>• 如果是 CORS 错误，可使用"跳过验证"功能</p>
+            </div>
+          )}
+          
+          <p className="text-center">
+            如果问题持续出现，请联系技术支持或查看 
+            <button 
+              onClick={() => window.open('https://www.dmxapi.cn/docs', '_blank')}
+              className="text-primary hover:underline ml-1"
+            >
+              API 文档
+            </button>
+          </p>
         </div>
       </Card>
     );
