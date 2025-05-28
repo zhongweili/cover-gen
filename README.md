@@ -44,7 +44,7 @@ pnpm build
 
 1. 访问 [DMX API 官网](https://www.dmxapi.cn)
 2. 注册账号并登录
-3. 在控制台创建应用，获取 API Key
+3. 进入控制台获取 API Key
 4. 充值账户余额（按使用量计费）
 
 ### 模型选择

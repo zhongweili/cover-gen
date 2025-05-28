@@ -161,7 +161,7 @@ export const ApiConfig: React.FC = () => {
             <ol className="text-sm text-gray-600 space-y-1 pl-4">
               <li>1. 访问 <a href="https://www.dmxapi.cn" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline inline-flex items-center">DMX API 官网 <ExternalLink className="w-3 h-3 ml-1" /></a></li>
               <li>2. 注册账号并登录</li>
-              <li>3. 在控制台创建应用，获取 API Key</li>
+              <li>3. 进入控制台获取 API Key</li>
               <li>4. 充值账户余额（按使用量计费）</li>
             </ol>
             
