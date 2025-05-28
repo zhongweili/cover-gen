@@ -3,14 +3,15 @@ import { motion } from 'framer-motion';
 import { Download, Copy, RotateCcw, Sparkles, Clock, AlertTriangle, RefreshCw } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
+import type { ImageResult } from '../../types/app';
 
 interface PreviewAreaProps {
   isGenerating: boolean;
   progress: number;
-  results: string[];
+  results: ImageResult[];
   error: string | null;
   onRegenerate: () => void;
-  onDownload: (url: string) => void;
+  onDownload: (imageResult: ImageResult) => void;
   onCopy: (url: string) => void;
 }
 
@@ -230,7 +231,7 @@ export const PreviewArea: React.FC<PreviewAreaProps> = ({
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {results.map((imageUrl, index) => (
+        {results.map((imageResult, index) => (
           <motion.div
             key={index}
             initial={{ opacity: 0, scale: 0.9 }}
@@ -240,7 +241,7 @@ export const PreviewArea: React.FC<PreviewAreaProps> = ({
             <Card className="overflow-hidden hover-lift">
               <div className="aspect-[900/388] bg-gray-100 rounded-lg overflow-hidden mb-4">
                 <img
-                  src={imageUrl}
+                  src={imageResult.url}
                   alt={`生成的封面 ${index + 1}`}
                   className="w-full h-full object-cover"
                   loading="lazy"
@@ -249,7 +250,7 @@ export const PreviewArea: React.FC<PreviewAreaProps> = ({
               
               <div className="flex space-x-2">
                 <Button
-                  onClick={() => onCopy(imageUrl)}
+                  onClick={() => onCopy(imageResult.url)}
                   variant="secondary"
                   size="sm"
                   className="flex-1"
@@ -258,7 +259,7 @@ export const PreviewArea: React.FC<PreviewAreaProps> = ({
                   复制链接
                 </Button>
                 <Button
-                  onClick={() => onDownload(imageUrl)}
+                  onClick={() => onDownload(imageResult)}
                   size="sm"
                   className="flex-1"
                 >
@@ -275,8 +276,8 @@ export const PreviewArea: React.FC<PreviewAreaProps> = ({
         <div className="text-center">
           <Button
             onClick={() => {
-              results.forEach((url, index) => {
-                setTimeout(() => onDownload(url), index * 100);
+              results.forEach((imageResult, index) => {
+                setTimeout(() => onDownload(imageResult), index * 100);
               });
             }}
             variant="outline"

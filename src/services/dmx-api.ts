@@ -1,5 +1,6 @@
 import axios from 'axios';
 import type { ImageGenerationRequest, ImageGenerationResponse } from '../types/api';
+import { convertToWeChatCover, getImageDimensions } from '../utils/image-processor';
 
 export class DmxApiService {
   private readonly API_HOST = 'www.dmxapi.cn';
@@ -13,6 +14,13 @@ export class DmxApiService {
 
   // 默认超时时间
   private readonly DEFAULT_TIMEOUT = 90000; // 1.5分钟
+
+  // 支持的尺寸列表（按优先级排序）
+  private readonly SUPPORTED_SIZES = [
+    '900x388',    // 微信公众号标准尺寸（首选）
+    '1024x1024',  // 标准方形尺寸（备用）
+    '512x512',    // 小尺寸备用
+  ];
 
   constructor(private apiKey: string) {}
 
@@ -32,11 +40,41 @@ export class DmxApiService {
   }
 
   async generateImage(request: ImageGenerationRequest): Promise<ImageGenerationResponse> {
+    // 首先尝试使用请求的尺寸
+    let response = await this.tryGenerateWithSize(request, request.size);
+    
+    // 如果失败且是尺寸相关错误，尝试备用尺寸
+    if (!response.success && this.isSizeRelatedError(response.error?.message)) {
+      console.log('Original size failed, trying fallback sizes...');
+      
+      for (const fallbackSize of this.SUPPORTED_SIZES) {
+        if (fallbackSize === request.size) continue; // 跳过已经尝试过的尺寸
+        
+        console.log(`Trying fallback size: ${fallbackSize}`);
+        response = await this.tryGenerateWithSize(request, fallbackSize);
+        
+        if (response.success) {
+          // 如果使用了备用尺寸且不是目标尺寸，需要进行图片处理
+          if (fallbackSize !== '900x388' && request.size === '900x388') {
+            response = await this.processImageToTargetSize(response, '900x388');
+          }
+          break;
+        }
+      }
+    }
+    
+    return response;
+  }
+
+  /**
+   * 尝试使用指定尺寸生成图片
+   */
+  private async tryGenerateWithSize(request: ImageGenerationRequest, size: string): Promise<ImageGenerationResponse> {
     const payload = {
       prompt: request.prompt,
       n: 1, // DMX API 固定为 1
       model: request.model,
-      size: request.size,
+      size: size,
       seed: request.seed || -1, // -1 表示随机
     };
 
@@ -52,7 +90,6 @@ export class DmxApiService {
       console.log('Making API request to:', `https://${this.API_HOST}${this.API_ENDPOINT}`);
       console.log('Request payload:', payload);
       console.log('Request timeout:', `${timeout}ms (${Math.round(timeout/1000)}s)`);
-      console.log('Request headers:', headers);
 
       // 显示开始时间用于调试
       const startTime = Date.now();
@@ -73,20 +110,22 @@ export class DmxApiService {
       console.log('Request completed in:', `${duration}ms (${Math.round(duration/1000)}s)`);
       console.log('API response:', response.data);
 
+      // 处理不同模型的响应格式
+      const processedImages = await this.processImageResponse(response.data.data || [], request.model);
+
       return {
         success: true,
         data: {
-          images: response.data.data || [],
+          images: processedImages,
         },
       };
     } catch (error: any) {
-      const endTime = Date.now();
       console.error('API request failed:', error);
       console.error('Error response:', error.response?.data);
       console.error('Error status:', error.response?.status);
       console.error('Error code:', error.code);
       console.error('Request model:', payload.model);
-      console.error('Request duration before error:', `${endTime - Date.now()}ms`);
+      console.error('Request size:', payload.size);
       
       let errorMessage = this.getDetailedErrorMessage(error, payload.model, timeout);
       
@@ -97,6 +136,136 @@ export class DmxApiService {
           message: errorMessage,
         },
       };
+    }
+  }
+
+  /**
+   * 检查错误是否与尺寸相关
+   */
+  private isSizeRelatedError(errorMessage?: string): boolean {
+    if (!errorMessage) return false;
+    const sizeKeywords = ['size', '尺寸', 'dimension', 'resolution', 'width', 'height'];
+    return sizeKeywords.some(keyword => errorMessage.toLowerCase().includes(keyword));
+  }
+
+  /**
+   * 将图片处理为目标尺寸
+   */
+  private async processImageToTargetSize(
+    response: ImageGenerationResponse, 
+    targetSize: string
+  ): Promise<ImageGenerationResponse> {
+    if (!response.success || !response.data?.images[0]) {
+      return response;
+    }
+
+    try {
+      const image = response.data.images[0];
+      const originalUrl = image.url;
+      
+      console.log(`Processing image from original size to ${targetSize}`);
+      
+      // 检查原始图片尺寸
+      const dimensions = await getImageDimensions(originalUrl);
+      console.log('Original image dimensions:', dimensions);
+      
+      // 如果已经是目标尺寸，直接返回
+      if (targetSize === '900x388' && dimensions.width === 900 && dimensions.height === 388) {
+        console.log('Image already has correct dimensions');
+        return response;
+      }
+      
+      // 转换为微信封面尺寸
+      if (targetSize === '900x388') {
+        const processedUrl = await convertToWeChatCover(originalUrl, 0.9);
+        
+        return {
+          success: true,
+          data: {
+            images: [{
+              url: processedUrl,
+              b64_json: image.b64_json // 保留原始 base64 数据
+            }]
+          }
+        };
+      }
+      
+      return response;
+    } catch (error) {
+      console.error('Image processing failed:', error);
+      // 如果处理失败，返回原始图片
+      return response;
+    }
+  }
+
+  /**
+   * 处理不同模型的图片响应格式
+   * SeedDream: 直接返回 URL
+   * OpenAI: 返回 base64 数据，需要转换为 blob URL
+   */
+  private async processImageResponse(images: any[], model: string): Promise<Array<{ url: string; b64_json?: string }>> {
+    console.log('Processing images for model:', model);
+    console.log('Raw images data:', images);
+
+    const processedImages: Array<{ url: string; b64_json?: string }> = [];
+
+    for (const image of images) {
+      try {
+        if (image.url) {
+          // SeedDream 模型：直接使用 URL
+          console.log('Found direct URL for image:', image.url);
+          processedImages.push({
+            url: image.url,
+            b64_json: image.b64_json
+          });
+        } else if (image.b64_json) {
+          // OpenAI 模型：将 base64 转换为 blob URL
+          console.log('Converting base64 to blob URL for OpenAI model');
+          const blobUrl = this.base64ToBlobUrl(image.b64_json);
+          processedImages.push({
+            url: blobUrl,
+            b64_json: image.b64_json
+          });
+        } else {
+          console.warn('Image data missing both url and b64_json:', image);
+        }
+      } catch (error) {
+        console.error('Error processing image:', error, image);
+      }
+    }
+
+    console.log('Processed images:', processedImages);
+    return processedImages;
+  }
+
+  /**
+   * 将 base64 图片数据转换为 blob URL
+   */
+  private base64ToBlobUrl(base64Data: string): string {
+    try {
+      // 移除 data URL 前缀（如果存在）
+      const base64String = base64Data.replace(/^data:image\/[a-z]+;base64,/, '');
+      
+      // 将 base64 转换为二进制数据
+      const binaryString = atob(base64String);
+      const bytes = new Uint8Array(binaryString.length);
+      
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      
+      // 创建 blob
+      const blob = new Blob([bytes], { type: 'image/png' });
+      
+      // 创建 blob URL
+      const blobUrl = URL.createObjectURL(blob);
+      
+      console.log('Successfully converted base64 to blob URL:', blobUrl);
+      return blobUrl;
+    } catch (error) {
+      console.error('Error converting base64 to blob URL:', error);
+      // 如果转换失败，返回 data URL 作为备用
+      return `data:image/png;base64,${base64Data}`;
     }
   }
 
@@ -142,7 +311,12 @@ export class DmxApiService {
     }
 
     if (error.response?.status === 400) {
-      return `请求参数错误 - ${modelName} 模型可能不支持当前参数设置，请检查：\n1. 提示词是否符合要求\n2. 图片尺寸是否支持\n3. 模型是否可用`;
+      // 检查是否是尺寸相关的错误
+      const errorMsg = error.response?.data?.error?.message || '';
+      if (errorMsg.includes('size') || errorMsg.includes('尺寸') || errorMsg.includes('dimension')) {
+        return `图片尺寸不支持 - ${modelName} 模型可能不支持 900×388 尺寸。建议：\n1. 联系 DMX API 确认支持的尺寸\n2. 可能需要使用标准尺寸如 1024×1024\n3. 或考虑后期裁剪处理\n\n原始错误：${errorMsg}`;
+      }
+      return `请求参数错误 - ${modelName} 模型可能不支持当前参数设置，请检查：\n1. 提示词是否符合要求\n2. 图片尺寸是否支持\n3. 模型是否可用\n\n详细错误：${errorMsg}`;
     }
 
     if (error.response?.status >= 500) {

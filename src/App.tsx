@@ -6,6 +6,7 @@ import { GenerationSettings } from './components/generation/GenerationSettings';
 import { PreviewArea } from './components/generation/PreviewArea';
 import { useConfigStore } from './stores/config';
 import { useGenerationStore } from './stores/generation';
+import type { ImageResult } from './types/app';
 
 function App() {
   const { config, isConfigured, loadConfig } = useConfigStore();
@@ -46,10 +47,33 @@ function App() {
     );
   };
 
-  const handleDownload = async (url: string) => {
+  const handleDownload = async (imageResult: ImageResult) => {
     try {
-      const response = await fetch(url);
-      const blob = await response.blob();
+      let blob: Blob;
+      
+      // 如果有 base64 数据，优先使用 base64（更高质量）
+      if (imageResult.b64_json) {
+        console.log('Downloading from base64 data');
+        const base64String = imageResult.b64_json.replace(/^data:image\/[a-z]+;base64,/, '');
+        const binaryString = atob(base64String);
+        const bytes = new Uint8Array(binaryString.length);
+        
+        for (let i = 0; i < binaryString.length; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
+        }
+        
+        blob = new Blob([bytes], { type: 'image/png' });
+      } else {
+        // 否则从 URL 下载
+        console.log('Downloading from URL:', imageResult.url);
+        const response = await fetch(imageResult.url);
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        blob = await response.blob();
+      }
+      
+      // 创建下载链接
       const downloadUrl = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = downloadUrl;
@@ -58,6 +82,8 @@ function App() {
       link.click();
       document.body.removeChild(link);
       window.URL.revokeObjectURL(downloadUrl);
+      
+      console.log('Download completed successfully');
     } catch (error) {
       console.error('Download failed:', error);
       alert('下载失败，请稍后重试');

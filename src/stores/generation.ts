@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { GenerationHistory } from '../types/api';
-import type { GenerationState } from '../types/app';
+import type { GenerationState, ImageResult } from '../types/app';
 import { DmxApiService } from '../services/dmx-api';
 
 interface GenerationStore extends GenerationState {
@@ -43,7 +43,7 @@ export const useGenerationStore = create<GenerationStore>((set, get) => ({
 
     try {
       const apiService = new DmxApiService(apiKey);
-      const results: string[] = [];
+      const results: ImageResult[] = [];
 
       // 生成多张图片
       for (let i = 0; i < count; i++) {
@@ -52,12 +52,15 @@ export const useGenerationStore = create<GenerationStore>((set, get) => ({
         const response = await apiService.generateImage({
           prompt,
           model,
-          size: '1024x1024', // 固定尺寸
+          size: '900x388', // 微信公众号封面标准尺寸
           n: 1,
         });
 
         if (response.success && response.data?.images[0]) {
-          results.push(response.data.images[0].url);
+          results.push({
+            url: response.data.images[0].url,
+            b64_json: response.data.images[0].b64_json
+          });
         } else {
           throw new Error(response.error?.message || '生成失败');
         }

@@ -1,8 +1,13 @@
+export interface ImageResult {
+  url: string;
+  b64_json?: string;
+}
+
 export interface GenerationState {
   isGenerating: boolean;
   progress: number;
   error: string | null;
-  results: string[];
+  results: ImageResult[];
 }
 
 export interface AppConfig {

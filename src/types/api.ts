@@ -36,6 +36,9 @@ export interface GenerationHistory {
   id: string;
   prompt: string;
   model: string;
-  images: string[];
+  images: Array<{
+    url: string;
+    b64_json?: string;
+  }>;
   timestamp: number;
 } 
